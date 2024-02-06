@@ -1,24 +1,30 @@
-#include <cglm/affine-pre.h>
+#include "include/glad/glad.h"
+#include <stdlib.h>
 #include <stdio.h>
+#include <GLFW/glfw3.h>
+#include <cglm/affine-pre.h>
 #include <cglm/vec3.h>
 #include <cglm/vec4.h>
 #include <string.h>
+#include<unistd.h>
+
 #define GLFW_INCLUDE_NONE
 #define CGLM_DEFINE_PRINTS
 #define STB_IMAGE_IMPLEMENTATION
 
 #include <cglm/mat4.h>
-#include <stdio.h>
-#include "include/glad/glad.h"
-#include <GLFW/glfw3.h>
 #include <cglm/types.h>
-#include <stb/stb_image.h>
 
 #define AIR 0
 #define WATER 1
 #define GLASS 2
 #define MIRROR 3
 #define UNCREATED 4
+
+#define SPEED_IN_AIR 1
+#define SPEED_IN_WATER 0.75
+#define SPEED_IN_GLASS 0.86
+
 
 const char *vertexShaderSource = "#version 330 core\n"
     "layout (location = 0) in vec3 aPos;\n"
@@ -28,7 +34,7 @@ const char *vertexShaderSource = "#version 330 core\n"
     "void main()\n"
     "{\n"
     "   vec4 test = model*rotation*vec4(aPos.x*size.x, aPos.y*size.y, aPos.z, 1.0);\n"
-    "   gl_Position = vec4(test.x/1920, test.y/1080, 0.0, 1.0);\n"
+    "   gl_Position = vec4(test.x/1632, test.y/918, 0.0, 1.0);\n"
     "}\0";
 const char *fragmentShaderSource = "#version 330 core\n"
     "out vec4 FragColor;\n"
@@ -55,9 +61,9 @@ const char *laserVertexShaderSource = "#version 330 core\n"
     "{\n"
     "   if (check == 0)\n"
     "   {\n"
-    "       gl_Position = vec4(rPos.x/1920, rPos.y/1080, 0.0, 1.0f);\n"
+    "       gl_Position = vec4(rPos.x/1632, rPos.y/918, 0.0, 1.0f);\n"
     "   }else{\n"
-    "       gl_Position = vec4(rPos.z/1920, rPos.w/1080, 0.0, 1.0f);\n"
+    "       gl_Position = vec4(rPos.z/1632, rPos.w/918, 0.0, 1.0f);\n"
     "   }\n"
     "}\n\0";
 
@@ -65,7 +71,7 @@ const char *laserFragmentShaderSource = "#version 330 core\n"
     "out vec4 FragColor;\n"
     "void main()\n"
     "{\n"
-    "   FragColor = vec4(1.0f, 1.0f, 0.3f, 1.0f);\n"
+    "   FragColor = vec4(1.0f, 0.1f, 0.2f, 1.0f);\n"
     "}\n\0";
 
 typedef struct{
@@ -79,7 +85,7 @@ typedef struct{
 typedef struct{
     rectangle* rect_ptr;
     void* next_rect;
-}link;
+}rectangle_link;
 
 typedef struct{
     vec2 link_point;
@@ -92,21 +98,21 @@ typedef struct{
 }laser_link;
 
 
-link* rect_link_head = NULL;
+rectangle_link* rect_link_head = NULL;
 laser_link* laser_link_head = NULL;
 
 rectangle create_sudo_element(int posX, int posY);
 
-void push_rectangle(link** head_ref, rectangle* rect_ptr)
+void push_rectangle(rectangle_link** head_ref, rectangle* rect_ptr)
 {
-    link* new_link = (link*)malloc(sizeof(link));
+    rectangle_link* new_link = (rectangle_link*)malloc(sizeof(rectangle_link));
  
     new_link->rect_ptr = rect_ptr;
-    new_link->next_rect = (struct link*)(*head_ref);
+    new_link->next_rect = (struct rectangle_link*)(*head_ref);
     (*head_ref) = new_link;
 }
 
-void push_laser(link** head_ref, laser* laser_ptr)
+void push_laser(rectangle_link** head_ref, laser* laser_ptr)
 {
     laser_link* new_link = (laser_link*)malloc(sizeof(laser_link));
 
@@ -114,8 +120,8 @@ void push_laser(link** head_ref, laser* laser_ptr)
     new_link->next_line = (struct laser_link*)(*head_ref);
 }
 
-int WINDOW_HEIGHT = 1080;
-int WINDOW_WIDTH = 1980;
+int WINDOW_HEIGHT = 918;
+int WINDOW_WIDTH = 1632;
 
 int posX = 0;
 int posY = 0;
@@ -145,7 +151,7 @@ void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos)
 
         vec3 new_pos = {
         2*sudo_element.pos[0]-WINDOW_WIDTH,
-        -(2*sudo_element.pos[1]-1080),
+        -(2*sudo_element.pos[1]-918),
         0.0,
     };
 }
@@ -191,7 +197,7 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mod)
 
 GLFWwindow* window_init()
 {
-    GLFWwindow* window = glfwCreateWindow(640, 480, "Hello World", NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(1632, 918, "Hello World", NULL, NULL);
     if (!window)
     {
         glfwTerminate();
@@ -208,9 +214,9 @@ GLFWwindow* window_init()
 
 
 
-void render_rectangles(unsigned int rectangle_shader_program, link* rect_link_head)
+void render_rectangles(unsigned int rectangle_shader_program, rectangle_link* rect_link_head)
 {
-    link* current = rect_link_head;
+    rectangle_link* current = rect_link_head;
 
     while (current != NULL)
     {
@@ -283,7 +289,7 @@ void render_sudo_item(unsigned int shaderProgram, rectangle sudo_element)
 
 int check_laser_collision(vec3 position, int *current_material, rectangle **current_rectangle)
 {
-    link* current = rect_link_head;
+    rectangle_link* current = rect_link_head;
 
     while (current != NULL)
     {
@@ -300,8 +306,9 @@ int check_laser_collision(vec3 position, int *current_material, rectangle **curr
         vec4 result;
         glm_mat4_mulv(inv_rot, position_relative, result); 
 
-        int collision_x = fabs(result[0])>fabs(current->rect_ptr->width)?1:0;
-        int collision_y = fabs(result[1])>fabs(current->rect_ptr->height)?1:0;
+
+        int collision_x = fabs(result[0])<=fabs(current->rect_ptr->width/2)?1:0;
+        int collision_y = fabs(result[1])<=fabs(current->rect_ptr->height/2)?1:0;
 
         if (collision_x && collision_y)
         {
@@ -329,8 +336,8 @@ int is_in_rectangle(rectangle *current_rectangle, vec3 position)
     vec4 result;
     glm_mat4_mulv(inv_rot, position_relative, result); 
 
-    int collision_x = fabs(result[0])>fabs(current_rectangle->width)?1:0;
-    int collision_y = fabs(result[1])>fabs(current_rectangle->height)?1:0;
+    int collision_x = fabs(result[0])<=fabs(current_rectangle->width/2)?1:0;
+    int collision_y = fabs(result[1])<=fabs(current_rectangle->height/2)?1:0;
 
     return (collision_x && collision_y)?1:0;
 }
@@ -347,37 +354,92 @@ void render_laser(vec3 last_pos, vec3 pos, unsigned int shaderProgram)
     glUniform4fv(posLocation, 1, comp_pos);
 
     glDrawArrays(GL_LINES, 0, 2);
-    printf("%f %f\n", comp_pos[2], comp_pos[3]);
 }
 
-void transition_vel_from_air(vec2 *vel, int prev_material)
+float speed_in_mat(int material)
 {
+    switch (material){
+        case AIR:
+            return SPEED_IN_AIR;
+        case WATER:
+            return SPEED_IN_WATER;
+        case GLASS:
+            return SPEED_IN_GLASS;
+        case MIRROR:
+            return -SPEED_IN_AIR;
+    }
+}
+
+void transition_vel_from_air(vec3 vel, rectangle *prev_material)
+{
+    float rotation_radians = prev_material->rot;
+    vec3 up_vec = {0.0, 1.0, 0.0};
+    vec3 z_axis = {0.0, 0.0, 1.0};
+    glm_vec3_rotate(up_vec, rotation_radians, z_axis);
+    float incidenc_angle = glm_vec3_angle(vel, up_vec);
+    float speed_in_material = (float)speed_in_mat(prev_material->material);
+    float sin_refraction_angle = sinf(incidenc_angle)*speed_in_material;
+    float refraction_angle = asin(sin_refraction_angle);
+    int sign = up_vec[0]<vel[0]?1:-1;
+    vec3 up_vec_2 = {0.0, 1.0, 0.0};
+    glm_vec3_rotate(up_vec_2, sign*refraction_angle, z_axis);
+    vel[0] = up_vec_2[0];
+    vel[1] = up_vec_2[1];
     return;
 }
 
-void transition_vel_to_air(vec2 *vel, int prev_material)
+void transition_vel_to_air(vec3 vel, rectangle *current_rectangle)
 {
+    float rotation_radians = current_rectangle->rot;
+    vec3 up_vec = {0.0, 1.0, 0.0};
+    vec3 z_axis = {0.0, 0.0, 1.0};
+    glm_vec3_rotate(up_vec, rotation_radians, z_axis);
+    float incidenc_angle = glm_vec3_angle(up_vec, vel);
+    float speed_in_material = (float)speed_in_mat(current_rectangle->material);
+    float sin_refraction_angle = sinf(incidenc_angle)/speed_in_material;
+    float refraction_angle = asin(sin_refraction_angle);
+    int sign = up_vec[0]<vel[0]?1:-1;
+    vec3 up_vec_2 = {0.0, 1.0, 0.0};
+    glm_vec3_rotate(up_vec, sign*refraction_angle, z_axis);
+    vel[0] = up_vec_2[0];
+    vel[1] = up_vec_2[1];
+    return;
+}
+
+void mirror_reflection(vec3 vel, rectangle *current_rectangle){
+    vec3 up_vec = {0.0, 1.0, 0.0};
+    vec3 z_axis = {0.0, 0.0, 1.0};
+    glm_vec3_rotate(up_vec, current_rectangle->rot, z_axis);
+    vel[0] = -vel[0];
+    vel[1] = -vel[1];
+    glm_vec3_rotate(vel, 3.1415, up_vec);
     return;
 }
 
 void compute_lasers(unsigned int laserShaderProgram)
 {
-    vec3 last_poition = {-1500.0f, -1080.0f, 0.0f};
-    vec3 position = {-1500.0f, -1080.0f, 0.0f};
-    vec2 velocity = {0.0f, 1.0f};
+    vec3 last_poition = {-1300.0f, -918.0f, 0.0f};
+    vec3 position = {-1300.0f, -918.0f, 0.0f};
+    vec3 velocity = {0.0f, 1.0f, 0.0};
     int current_material = AIR;
     rectangle* current_rectangle = (rectangle*)malloc(sizeof(rectangle));
-    while ((position[0] >= -1920.0f && position[0] <= 1920)&&(position[1] >= -1080.0f && position[1] <= 1080.0f))
+    while ((position[0] >= -1632.0f && position[0] <= 1632)&&(position[1] >= -918.0f && position[1] <= 918.0f))
     {
         position[0] += velocity[0];
         position[1] += velocity[1];
-        
+
         if (current_material == AIR)
         {
             if (check_laser_collision(position, &current_material, &current_rectangle))
             {
                 render_laser(last_poition, position, laserShaderProgram);
-                transition_vel_from_air(&velocity, current_material);
+                if (current_material == MIRROR){
+                    mirror_reflection(velocity, current_rectangle);
+                    current_material = AIR;
+                }else{
+                    transition_vel_from_air(velocity, current_rectangle);
+
+                }
                 last_poition[0] = position[0];
                 last_poition[1] = position[1];
             }
@@ -386,7 +448,7 @@ void compute_lasers(unsigned int laserShaderProgram)
             if (!is_in_rectangle(current_rectangle, position))
             {
                 render_laser(last_poition, position, laserShaderProgram);
-                transition_vel_to_air(&velocity, current_material);
+                transition_vel_to_air(velocity, current_rectangle);
                 last_poition[0] = position[0];
                 last_poition[1] = position[1];
                 current_material = AIR;
@@ -532,10 +594,10 @@ int main(){
     glBindVertexArray(0);
 
     rectangle test = {
-        {-1500, 0, 0},
-        400,
-        200,
-        0.6,
+        {-1250, 0, 0},
+        500,
+        300,
+        -0.3,
         WATER,
     };
     push_rectangle(&rect_link_head, &test);
@@ -564,15 +626,11 @@ int main(){
 
         compute_lasers(laserShaderProgram);
 
-        vec4 testPos = {-1500, -600, 1550, -100};
-        unsigned int posLocation = glGetUniformLocation(laserShaderProgram, "rPos");
-        glUniform4fv(posLocation, 1, testPos);
         glLineWidth(5);
-
-        glDrawArrays(GL_LINES, 0, 2);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
+        //sleep(2);
     }
 
     glDeleteVertexArrays(1, &VAO);

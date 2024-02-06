@@ -1,0 +1,15 @@
+{
+    "configurations": [
+        {
+            "name": "NixOS",
+            "includePath": [
+                "./shell.nix"
+            ],
+            "intelliSenseMode": "clang-x64",
+            "compilerPath": "/nix/store/vylmp73qymnv4siaqn1kl2hghj07hrj8-gcc-wrapper-12.3.0/bin/gcc",
+            "cStandard": "c11",
+            "cppStandard": "c++17"
+        }
+    ],
+    "version": 4
+}
