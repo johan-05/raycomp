@@ -1,4 +1,5 @@
 #include "include/glad/glad.h"
+#include <fenv.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <GLFW/glfw3.h>
@@ -6,6 +7,7 @@
 #include <cglm/vec3.h>
 #include <cglm/vec4.h>
 #include <string.h>
+#include <strings.h>
 #include<unistd.h>
 
 #define GLFW_INCLUDE_NONE
@@ -22,8 +24,8 @@
 #define UNCREATED 4
 
 #define SPEED_IN_AIR 1
-#define SPEED_IN_WATER 0.75
-#define SPEED_IN_GLASS 0.86
+#define SPEED_IN_WATER 0.66
+#define SPEED_IN_GLASS 0.66
 
 
 const char *vertexShaderSource = "#version 330 core\n"
@@ -128,6 +130,8 @@ int posY = 0;
 
 int sudo_item_active = 0;
 
+vec3 Z_AXIS = {0.0, 0.0, 1.0};
+
 rectangle sudo_element;
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
@@ -197,7 +201,7 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mod)
 
 GLFWwindow* window_init()
 {
-    GLFWwindow* window = glfwCreateWindow(1632, 918, "Hello World", NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(1632, 918, "Raycomp", NULL, NULL);
     if (!window)
     {
         glfwTerminate();
@@ -373,36 +377,33 @@ float speed_in_mat(int material)
 void transition_vel_from_air(vec3 vel, rectangle *prev_material)
 {
     float rotation_radians = prev_material->rot;
-    vec3 up_vec = {0.0, 1.0, 0.0};
+    int signY = vel[1]>0?1:-1;
+    vec3 up_vec = {0.0, signY*1.0, 0.0};
     vec3 z_axis = {0.0, 0.0, 1.0};
-    glm_vec3_rotate(up_vec, rotation_radians, z_axis);
+    glm_vec3_rotate(up_vec, rotation_radians, Z_AXIS);
+    int signX = up_vec[0]<vel[0]?-1:1;
     float incidenc_angle = glm_vec3_angle(vel, up_vec);
     float speed_in_material = (float)speed_in_mat(prev_material->material);
-    float sin_refraction_angle = sinf(incidenc_angle)*speed_in_material;
-    float refraction_angle = asin(sin_refraction_angle);
-    int sign = up_vec[0]<vel[0]?1:-1;
-    vec3 up_vec_2 = {0.0, 1.0, 0.0};
-    glm_vec3_rotate(up_vec_2, sign*refraction_angle, z_axis);
-    vel[0] = up_vec_2[0];
-    vel[1] = up_vec_2[1];
+    float refraction_angle = asin(speed_in_material*sinf(incidenc_angle));
+    glm_vec3_rotate(up_vec, signY*signX*refraction_angle, Z_AXIS);
+    vel[0] = up_vec[0];
+    vel[1] = up_vec[1];
     return;
 }
 
 void transition_vel_to_air(vec3 vel, rectangle *current_rectangle)
 {
     float rotation_radians = current_rectangle->rot;
-    vec3 up_vec = {0.0, 1.0, 0.0};
-    vec3 z_axis = {0.0, 0.0, 1.0};
-    glm_vec3_rotate(up_vec, rotation_radians, z_axis);
+    int signY = vel[1]>0?1:-1;
+    vec3 up_vec = {0.0, signY*1.0, 0.0};
+    glm_vec3_rotate(up_vec, rotation_radians, Z_AXIS);
     float incidenc_angle = glm_vec3_angle(up_vec, vel);
     float speed_in_material = (float)speed_in_mat(current_rectangle->material);
-    float sin_refraction_angle = sinf(incidenc_angle)/speed_in_material;
-    float refraction_angle = asin(sin_refraction_angle);
-    int sign = up_vec[0]<vel[0]?1:-1;
-    vec3 up_vec_2 = {0.0, 1.0, 0.0};
-    glm_vec3_rotate(up_vec, sign*refraction_angle, z_axis);
-    vel[0] = up_vec_2[0];
-    vel[1] = up_vec_2[1];
+    float refraction_angle = asin(sinf(incidenc_angle)/speed_in_material);
+    int signX = up_vec[0]<vel[0]?-1:1;
+    glm_vec3_rotate(up_vec, signY*signX*refraction_angle, Z_AXIS);
+    vel[0] = up_vec[0];
+    vel[1] = up_vec[1];
     return;
 }
 
@@ -597,7 +598,7 @@ int main(){
         {-1250, 0, 0},
         500,
         300,
-        -0.3,
+        -0.55,
         WATER,
     };
     push_rectangle(&rect_link_head, &test);
