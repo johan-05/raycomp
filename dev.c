@@ -1,10 +1,14 @@
 #include "include/glad/glad.h"
+
+#include "glfw3.h"
 #include <stdlib.h>
 #include <stdio.h>
-#include <GLFW/glfw3.h>
-#include <cglm/affine-pre.h>
-#include <cglm/vec3.h>
-#include <cglm/vec4.h>
+
+#include "cglm/vec3.h"
+#include "cglm/mat4.h"
+#include "cglm/types.h"
+#include "cglm/affine-pre.h"
+
 #include <string.h>
 #include <strings.h>
 #include <unistd.h>
@@ -13,8 +17,6 @@
 #define CGLM_DEFINE_PRINTS
 #define STB_IMAGE_IMPLEMENTATION
 
-#include <cglm/mat4.h>
-#include <cglm/types.h>
 
 #define AIR 0
 #define WATER 1
@@ -178,7 +180,7 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mod)
 
         int buffer;
         printf("select rotation in degrees\n");
-        scanf("%4d", &buffer);
+        int result = scanf("%4d", &buffer);
         float rotation = -buffer*6.26/360;
         sudo_element_copy->rot = rotation;
 
@@ -186,7 +188,7 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mod)
         while (material > 3 || material < 1)
         {
             printf("select material\n 1:Water, 2:Glass, 3:Mirror\n");
-            scanf("%1d", &material);
+            int result = scanf("%1d", &material);
         }
         sudo_element_copy->material = material;
         push_rectangle(&rect_link_head, sudo_element_copy);
