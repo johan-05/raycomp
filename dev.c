@@ -137,8 +137,6 @@ rectangle sudo_element;
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
-    // make sure the viewport matches the new window dimensions; note that width and 
-    // height will be significantly larger than specified on retina displays.
     glViewport(0, 0, width, height);
 }
 
@@ -153,12 +151,6 @@ void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos)
         sudo_element.width = width;
         sudo_element.height = height;
     }
-
-        vec3 new_pos = {
-        2*sudo_element.pos[0]-WINDOW_WIDTH,
-        -(2*sudo_element.pos[1]-918),
-        0.0,
-    };
 }
 
 void processInput(GLFWwindow *window)
@@ -312,8 +304,8 @@ int check_laser_collision(vec3 position, int *current_material, rectangle **curr
         glm_mat4_mulv(inv_rot, position_relative, result); 
 
 
-        int collision_x = fabs(result[0])<=fabs(current->rect_ptr->width/2)?1:0;
-        int collision_y = fabs(result[1])<=fabs(current->rect_ptr->height/2)?1:0;
+        int collision_x = fabs(result[0])<=fabs(current->rect_ptr->width/2);
+        int collision_y = fabs(result[1])<=fabs(current->rect_ptr->height/2);
 
         if (collision_x && collision_y)
         {
@@ -341,10 +333,10 @@ int is_in_rectangle(rectangle *current_rectangle, vec3 position)
     vec4 result;
     glm_mat4_mulv(inv_rot, position_relative, result); 
 
-    int collision_x = fabs(result[0])<=fabs(current_rectangle->width/2)?1:0;
-    int collision_y = fabs(result[1])<=fabs(current_rectangle->height/2)?1:0;
+    int collision_x = fabs(result[0])<=fabs(current_rectangle->width/2);
+    int collision_y = fabs(result[1])<=fabs(current_rectangle->height/2);
 
-    return (collision_x && collision_y)?1:0;
+    return (collision_x && collision_y);
 }
 
 void render_laser(vec3 last_pos, vec3 pos, unsigned int shaderProgram)
@@ -372,6 +364,8 @@ float speed_in_mat(int material)
             return SPEED_IN_GLASS;
         case MIRROR:
             return -SPEED_IN_AIR;
+        default:
+            return 69420.0;
     }
 }
 
@@ -466,6 +460,8 @@ int main(){
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
+
 
     // glfw window creation
     // --------------------
@@ -641,6 +637,5 @@ int main(){
 
     glfwTerminate();
     return 0;
-
 }
 
