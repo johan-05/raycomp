@@ -1,6 +1,7 @@
 #include "include/glad/glad.h"
 
 #include "glfw3.h"
+#include <math.h>
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -392,7 +393,7 @@ int check_laser_collision(vec3 position, vec3 velocity, int *current_material, i
     return 0;
 }
 
-int is_in_polygon(vec3 position, vec3 velocity, polygon *current_polygon)
+int is_in_polygon(vec3 position, vec3 velocity, int *current_vertex, polygon *current_polygon)
 {
 
     for (int i = 0; i<current_polygon->type; ++i)
@@ -401,15 +402,29 @@ int is_in_polygon(vec3 position, vec3 velocity, polygon *current_polygon)
         // from vertex a to to position + velcity is on right
         // and position to vectex a and positon to vertex b are on different 
         // sides from position + velocity. 
+
+        int indx_array[8];
+        if (current_polygon->type == TRIANGLE)
+        {
+            int new_arr[] = {0, 2, 4, 0, 2, 4, 0, 0};
+            memcpy(indx_array, new_arr, sizeof(indx_array));
+            
+        }else{
+            int new_arr[] = {0, 2, 4, 6, 2, 4, 6, 0};
+            memcpy(indx_array, new_arr, sizeof(indx_array));
+        }
+
+
         vec3 vrtx = {
-            current_polygon->points[2*i+2] - current_polygon->points[2*i],
-            current_polygon->points[2*i+3] - current_polygon->points[2*i+1],
+            current_polygon->points[indx_array[i+4]] - current_polygon->points[indx_array[i]],
+            current_polygon->points[indx_array[i+4]+1] - current_polygon->points[indx_array[i]+1],
             0.0
         };
 
+
         vec3 vrtx_a_to_pos = {
-            position[0] - current_polygon->points[2*i],
-            position[1] - current_polygon->points[2*i+1],
+            position[0] - current_polygon->points[indx_array[i]],
+            position[1] - current_polygon->points[indx_array[i]+1],
             0.0,
         };
 
@@ -426,8 +441,8 @@ int is_in_polygon(vec3 position, vec3 velocity, polygon *current_polygon)
         vec3 pos_to_vrtx_a;
         glm_vec3_scale(vrtx_a_to_pos, -1, pos_to_vrtx_a);
         vec3 pos_to_vrtx_b = {
-            current_polygon->points[2*i+2] - position[0],
-            current_polygon->points[2*i+3] - position[1],
+            current_polygon->points[indx_array[i+4]] - position[0],
+            current_polygon->points[indx_array[i+4]+1] - position[1],
         };
 
         glm_vec3_cross(pos_to_vrtx_a, velocity, cross_old);
@@ -436,11 +451,12 @@ int is_in_polygon(vec3 position, vec3 velocity, polygon *current_polygon)
         int two_sides_of_vel = cross_old[2]*cross_new[2]<0;
 
         if (switched_side_of_vertex && two_sides_of_vel){
-            return 1;
+            *current_vertex = i;
+            return 0;
         }
     }
 
-    return 0;
+    return 1;
 }
 
 void render_laser(vec3 last_pos, vec3 pos, unsigned int shaderProgram)
@@ -476,15 +492,28 @@ float speed_in_mat(int material)
 void transition_vel_from_air(vec3 vel, int vrtx_indx, polygon *prev_polygon)
 {
 
+    int indx_array[8];
+    if (prev_polygon->type == TRIANGLE)
+    {
+        int new_arr[] = {0, 2, 4, 0, 2, 4, 0, 0};
+        memcpy(indx_array, new_arr, sizeof(indx_array));
+        
+    }else{
+        int new_arr[] = {0, 2, 4, 6, 2, 4, 6, 0};
+        memcpy(indx_array, new_arr, sizeof(indx_array));
+    }
+
+
     vec3 vrtx = {
-        prev_polygon->points[2*vrtx_indx+2] - prev_polygon->points[2*vrtx_indx],
-        prev_polygon->points[2*vrtx_indx+3] - prev_polygon->points[2*vrtx_indx+1],
+        prev_polygon->points[indx_array[vrtx_indx+4]] - prev_polygon->points[indx_array[vrtx_indx]],
+        prev_polygon->points[indx_array[vrtx_indx+4]+1] - prev_polygon->points[indx_array[vrtx_indx]+1],
         0.0
     };
 
+
     vec3 norm;
     glm_vec3_dup(vrtx, norm);
-    glm_vec3_rotate(norm, PI/2, Z_AXIS);
+    glm_vec3_rotate(norm, -PI/2, Z_AXIS);
 
     vec3 cross_result;
     glm_vec3_cross(vel, norm, cross_result);
@@ -496,8 +525,10 @@ void transition_vel_from_air(vec3 vel, int vrtx_indx, polygon *prev_polygon)
     float refraction_angle = asin(speed_in_material*sinf(incidence_angle));
 
     glm_vec3_rotate(norm, refraction_angle, Z_AXIS);
-    vel[0] = norm[0];
+    glm_normalize(norm);
+    vel[0] = norm[0]; 
     vel[1] = norm[1];
+    
 
     /*float rotation_radians = prev_polygon->rot;
     int signY = vel[1]>0?1:-1;
@@ -513,30 +544,48 @@ void transition_vel_from_air(vec3 vel, int vrtx_indx, polygon *prev_polygon)
     vel[1] = up_vec[1];*/
     return;
 }
+void mirror_reflection(vec3 vel, int vrtx_indx, polygon *current_polygon);
 
-void transition_vel_to_air(vec3 vel, int vrtx_indx, polygon *prev_polygon)
+
+int transition_vel_to_air(vec3 vel, int vrtx_indx, polygon *prev_polygon)
 {
 
+    int indx_array[8];
+    if (prev_polygon->type == TRIANGLE)
+    {
+        int new_arr[] = {0, 2, 4, 0, 2, 4, 0, 0};
+        memcpy(indx_array, new_arr, sizeof(indx_array));
+        
+    }else{
+        int new_arr[] = {0, 2, 4, 6, 2, 4, 6, 0};
+        memcpy(indx_array, new_arr, sizeof(indx_array));
+    }
+
+
     vec3 vrtx = {
-        prev_polygon->points[2*vrtx_indx+2] - prev_polygon->points[2*vrtx_indx],
-        prev_polygon->points[2*vrtx_indx+3] - prev_polygon->points[2*vrtx_indx+1],
+        prev_polygon->points[indx_array[vrtx_indx+4]] - prev_polygon->points[indx_array[vrtx_indx]],
+        prev_polygon->points[indx_array[vrtx_indx+4]+1] - prev_polygon->points[indx_array[vrtx_indx]+1],
         0.0
     };
 
     vec3 norm;
     glm_vec3_dup(vrtx, norm);
-    glm_vec3_rotate(norm, PI/2, Z_AXIS);
 
+    glm_vec3_rotate(norm, -PI/2, Z_AXIS);
     vec3 cross_result;
     glm_vec3_cross(vel, norm, cross_result);
     int sign = cross_result[2]<0?1:-1;
-
-    float incidence_angle = sign*glm_vec3_angle(norm, vel);
+    glm_vec3_scale(norm, sign, norm);
+    float incidence_angle = glm_vec3_angle(norm, vel);
 
     float speed_in_material = (float)speed_in_mat(prev_polygon->material);
     float refraction_angle = asin(sinf(incidence_angle)/speed_in_material);
-
+    if (refraction_angle!=refraction_angle){
+        mirror_reflection(vel, vrtx_indx, prev_polygon);
+        return 0;
+    }
     glm_vec3_rotate(norm, refraction_angle, Z_AXIS);
+    glm_normalize(norm);
     vel[0] = norm[0];
     vel[1] = norm[1];
 
@@ -552,7 +601,7 @@ void transition_vel_to_air(vec3 vel, int vrtx_indx, polygon *prev_polygon)
     glm_vec3_rotate(up_vec, signY*signX*refraction_angle, Z_AXIS);
     vel[0] = up_vec[0];
     vel[1] = up_vec[1];*/
-    return;
+    return 1;
 }
 
 void mirror_reflection(vec3 vel, int vrtx_indx, polygon *current_polygon)
@@ -579,7 +628,7 @@ void compute_lasers(unsigned int laserShaderProgram)
 {
     vec3 last_poition = {-1300.0f, -918.0f, 0.0f};
     vec3 position = {-1300.0f, -918.0f, 0.0f};
-    vec3 velocity = {0.0f, 10.0f, 0.0};
+    vec3 velocity = {0.0f, 1.0f, 0.0};
     int current_material = AIR;
     int current_vertex = 0;
     polygon* current_polygon = (polygon*)malloc(sizeof(polygon));
@@ -592,7 +641,6 @@ void compute_lasers(unsigned int laserShaderProgram)
         {
             if (check_laser_collision(position, velocity, &current_material, &current_vertex, &current_polygon))
             {
-                printf("collision %f %f\n", position[0], position[1]);
                 render_laser(last_poition, position, laserShaderProgram);
                 if (current_material == MIRROR)
                 {
@@ -607,14 +655,14 @@ void compute_lasers(unsigned int laserShaderProgram)
             }
         } else
         {
-            if (!is_in_polygon(position, velocity, current_polygon))
+            if (!is_in_polygon(position, velocity, &current_vertex, current_polygon))
             {
-                printf("collision exit %f %f\n", position[0], position[1]);
                 render_laser(last_poition, position, laserShaderProgram);
-                transition_vel_to_air(velocity, current_vertex, current_polygon);
+                if (transition_vel_to_air(velocity, current_vertex, current_polygon)){;
+                    current_material = AIR;
+                }
                 last_poition[0] = position[0];
                 last_poition[1] = position[1];
-                current_material = AIR;
             }
         }
     }
