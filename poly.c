@@ -1,3 +1,26 @@
+// -------------Raycomp----------------
+// Velkommen til den mystiske innsiden av simuleringen som jeg
+// har valgt å kalle Raycomp (Ray-computing). Jeg håper å kunne forklare
+// programmet på en slik måte at man kan forstå ideen selv uten kjennskap
+// til C eller programmering. Fundamentalt har programmet to deler. 
+// Selve simuleringen er ikke det du ser på skjermen. Simuleringen eksisterer
+// kun i usynlig matte. Den andre delen av programmet er grafikken som viser 
+// resultatet av simuleringen. For grafikk bruker jeg OpenGL. Alle funksjoner 
+// som begynner med gl hører til OpenGL biblioteket. Det er ikke det
+// mest ideelle valget, men det er det eneste grafikk-biblioteket jeg har erfaring
+// med. Jeg turte ikke gamble på å lære meg SDL2 eller Raylib selv om de passer
+// bedre til denne typen lav-intensitet grafikk. Grunnen til at OpenGL gjør
+// ting komplisert er at det kommuniserer med grafikkortet for å gjøre grafikken
+// mye mer effektiv, men komplisert å programmere. Med det ute av veien
+// la oss sette i gang!
+
+
+
+// ----------------- Seksjon 1: definisjoner -------------------
+// Denne første seksjonen inneholder definisjoner og inkluderingen av filer.
+// Alt som starter med #include henter inn OpenGL biblioteket eller andre 
+// nyttige funksjoner som brukes i programmet.
+
 #include "include/glad/glad.h"
 
 #include "glfw3.h"
@@ -13,6 +36,11 @@
 #include <string.h>
 #include <strings.h>
 #include <unistd.h>
+
+// #define er nesten som en variabel men mer som et 
+// alias for en verdi. De kan ikke endres og tar ikke noe
+// plass i minnet. Når programmet kompileres bytter kompileren
+// SPEED_IN_AIR ut med 2.99 overalt i koden. 
 
 #define GLFW_INCLUDE_NONE
 #define CGLM_DEFINE_PRINTS
@@ -35,6 +63,12 @@
 #define TRIANGLE  3
 #define RECTANGLE  4
 
+
+// Allerede her begynner kompleksiteten jeg lovte med grafikkortet
+// Disse fire konstantene er små program kallt "shaders" som kjøres
+// på grafikkortet. en VertexShader samler distinkte punkt til en form
+// enten en trekant eller firkant. En FragmentShader definerer fargen.
+// Vi har Vertex og Fragment for mangekantene og for laserene.
 
 const char *vertexShaderSource = "#version 330 core\n"
     "layout (location = 0) in float indx;\n"
@@ -95,49 +129,103 @@ const char *laserFragmentShaderSource = "#version 330 core\n"
     "}\n\0";
 
 
+// Den siste vi må definere er de komplekse typene vi trenger
+// Disse heter struct og er omtrent som objekt i andre språk.
+
+// polygon definerer en mangekant, enten en trekant eller firkant.
+// Det kan se merkelig ut at typen mangekant og materialet er en int,
+// men det er fordi vi har definert TRIANGLE som 3 og RECTANGLE som 4
+// materialt er også definert som tall. C liker ikke takst som navn så
+// på denne måten kan vi som programmerer navngi ting som tekst mens
+// programmet bare ser tall.
+
 typedef struct{
     int type;
     int material;
     float points[8];
 }polygon;
 
+// Polygon link er et element i en såkalt linket liste.
+// OK, vi kommer ikke utenom en grunnleggende forklaing av pointere.
+// En pointer kan tenkes på som en pil som peker til noe. I virkeligheten
+// er det en minne-addresse hvor verdien befinner seg. Pointere noteres
+// på formen "type *variabel_navn". Dette vil si at polygon *poly_ptr
+// som vi kan se i polygon_link betyr at poly_ptr er navnet på variabelen'
+// og at variabelen har datatypen pointer til en polygon. 
+// En polygon_link har to pointere, en til polygonet og en til nest element
+// i den linkede listen. 
+
 typedef struct{
-    polygon* poly_ptr;
-    void* next_poly;
+    polygon *poly_ptr;
+    void *next_poly;
 }polygon_link;
+
+// laser structen er den simpleste av de fire: Det er en laser
+// én laser vil si en rett linje. Hver knekk og refleksjon gir
+// en ny laser. Laseren har kunn en posisjon representert som en vektor
 
 typedef struct{
     vec2 link_point;
-    float freq;
 }laser;
 
+// laser_link er samme ide som polygon_link. Sentralt til programmet
+// er to linkede lister: en for mangekanter og en for lasere. Disse 
+// renderes hver frame.  
+
 typedef struct{
-    laser* laser_ptr;
-    void* next_line;
+    laser *laser_ptr;
+    void *next_line;
 }laser_link;
 
+
+//------------------ Seksjon 2: Stille før stormen -----------------
+// Før vi begynner med det virkelig saftige stoffet har vi en del initialisering å gjøre
+// Det er viktig å huske på at C i motsetning til språk som Python
+// ikke kjører fra topp til bunn. Startpunktet for programmet er funksjonen
+// int main() som ironisk nok er i bunnen av filen. Husk på at funksjoner ikke 
+// kalles i rekkefølgen de er skrevet.
+
+// Her initialisere vi de to linkede listene. "head" betyr starten på en
+// linked liste. NULL betyr ingenting, altå konseptet ingenting. De viser
+// at de to listene foreløpig ikke har noen elementer. 
 
 polygon_link* poly_link_head = NULL;
 laser_link* laser_link_head = NULL;
 
-//polygon create_sudo_element(int posX, int posY);
+// Disse to funksjonene brukes for å legge til elementer i de linkede listene.
+// De tar in listes "head" og en polygon eller laser og legger det til i listen
+// C har ikke noe funksjon ord som def i python eller function i JS, men starter
+// med den returnerende datatypen. void push_polygon() betyr at funksjonen heter
+// push_polygon og returnere void, som omtrent som NULL betyr ingenting.
 
-void push_polygon(polygon_link** head_ref, polygon* poly_ptr)
+void push_polygon(polygon_link **head_ref, polygon *poly_ptr)
 {
-    polygon_link* new_link = (polygon_link*)malloc(sizeof(polygon_link));
+    polygon_link *new_link = (polygon_link*)malloc(sizeof(polygon_link));
  
     new_link->poly_ptr = poly_ptr;
     new_link->next_poly = (struct polygon_link*)(*head_ref);
     (*head_ref) = new_link;
+    return;
 }
 
-void push_laser(laser_link** head_ref, laser* laser_ptr)
+void push_laser(laser_link **head_ref, laser *laser_ptr)
 {
     laser_link* new_link = (laser_link*)malloc(sizeof(laser_link));
 
     new_link->laser_ptr = laser_ptr;
     new_link->next_line = (struct laser_link*)(*head_ref);
+    return;
 }
+
+// Her har vi en definisjon av alle de 7 globale variabelene i programmet
+// Med unntak av disse er alle andre variabler lokale.
+// z-aksen er z-aksen, simpelt nok. WINDOW_HEIGHT og WIDTH er dimensjonene
+// av vinduet som programmet lager. posX og posY vil senere bli brukt til å
+// lagre mus-posisjonen. sude_element_active definerer om vi holder på å tegne
+// en mangekant. Mangekanten som holder på å tegnes er sudo_element. Den defineres,
+// men får ingen verdi enda. 
+
+vec3 Z_AXIS = {0.0, 0.0, 1.0};
 
 int WINDOW_HEIGHT = 918;
 int WINDOW_WIDTH = 1632;
@@ -145,20 +233,28 @@ int WINDOW_WIDTH = 1632;
 int posX = 0;
 int posY = 0;
 
-int sudo_element_active = 0;
-
-vec3 Z_AXIS = {0.0, 0.0, 1.0};
+int sudo_element_active = false;
 
 polygon *sudo_element;
 
+// Ikke tenkt på denne
 polygon *create_sudo_element(int type);
 
 
-void framebuffer_size_callback(GLFWwindow* window, int width, int height)
+
+//------------------ Seksjon 3: OpenGL relatert -----------------
+// Dette er en rekke funksjoner som samhandler med OpenGL sitt event-system
+// frambuffer_size_callback() passer på at programmet tilpasser seg endringer
+// i vinduets størrelse
+
+void framebuffer_size_callback(GLFWwindow *window, int width, int height)
 {
     glViewport(0, 0, width, height);
 }
 
+// Denne funksjonene kalles av OpenGL hver gang musen beveger på seg
+// I dette programmet brues den til å finne posisjonen til hjørnene
+// av nye mangekanter. 
 void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos)
 {
     posX = 2*xpos-WINDOW_WIDTH;
@@ -185,6 +281,10 @@ void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos)
     }
 }
 
+
+// Denne funksjonen tar seg av tastatur-input. Det brukes til å
+// finne ut når vi skal lage en my mangekant
+
 void processInput(GLFWwindow *window)
 {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
@@ -203,6 +303,10 @@ void processInput(GLFWwindow *window)
         printf("after\n");
     }
 }
+
+
+// Denne funksjonen kalles hver gang en av mus-knappene klikkes. 
+// funksjonen jobber tett med mouse_pos_callback for å definere mangekanter
 
 void mouse_button_callback(GLFWwindow *window, int button, int action, int mod)
 {
@@ -240,6 +344,11 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mod)
     }
 }
 
+// Window_init() gjør omtrent det navnet tilsier. Funksjonen kalles tidlig
+// i programmet og setter opp vinduet med dimensjoner og navn. Den fester også 
+// de tidligere nevnte dunksjonene til "OpenGL conteksten" slik at de kan ta del
+// i event-systemet.
+
 GLFWwindow* window_init()
 {
     GLFWwindow* window = glfwCreateWindow(1632, 918, "Raycomp", NULL, NULL);
@@ -258,6 +367,80 @@ GLFWwindow* window_init()
 }
 
 
+//------------------ Seksjon 4: Rendering -----------------
+// Så nå har vi definert en hel rekke datatyper, vi har en GL context
+// og vi kan lytte til event-systemet så nå er det på tide å begynne
+// å fylle de to linkede listene og rendere dem.
+
+// Denne funksjonen initialiserer et nytt sudo_element
+// Den kalles når brukeren trykker ENTER. 
+// sude_elementet som skapes er fyllt av 69420 som bare betyr en
+// uinitialisert verdi. posisjonsverdiene fylles ut av mouse_pos_callback()
+
+polygon *create_sudo_element(int type)
+{
+    polygon *sudo_element_thing = (polygon*)malloc(sizeof(polygon));
+    if (type == TRIANGLE)
+    {
+        polygon element = {
+            TRIANGLE,
+            UNCREATED,
+            {
+                69420.0, 69420.0,
+                69420.0, 69420.0,
+                69420.0, 69420.0,
+                0.0, 0.0
+            },
+        };
+        memcpy(sudo_element_thing, &element, sizeof(polygon));
+    } else{
+        polygon element = {
+            RECTANGLE,
+            UNCREATED,
+            {
+                69420.0, 69420.0,
+                69420.0, 69420.0,
+                69420.0, 69420.0,
+                69420.0, 69420.0
+            }
+        };
+        memcpy(sudo_element_thing, &element, sizeof(polygon));
+
+    }
+
+    return sudo_element_thing;
+}
+
+
+// Denne funksjonen renderer sudo_elementet. 
+
+void render_sudo_element(unsigned int shaderProgram, polygon *sudo_element)
+{
+
+    unsigned int posLocation = glGetUniformLocation(shaderProgram, "rPos");
+
+    for (int i = 0; i<3; ++i)
+    {
+        if (sudo_element->points[2*i+2] != 69420.0 && sudo_element->points[2*i+2] != 0.0)
+        {
+            vec4 rPos = {
+                sudo_element->points[2*i],
+                sudo_element->points[2*i+1],
+                sudo_element->points[2*i+2],
+                sudo_element->points[2*i+3],
+            };
+            glUniform4fv(posLocation, 1, rPos);
+            glDrawArrays(GL_LINES, 0, 2);
+        }
+    }
+}
+
+
+// Denne funksjonene renderer mangekantene.
+// Det som skjer her er at vi looper over alle mangekantene i den linkede
+// listen, så lager vi to firedimensjonale vektorer med x og y kordinatene
+// til punktene som definerer mangekanten, sender det over en data-bro
+// til grafikkortet som gjør sin magi med Shaderene vi så tidligere. 
 
 void render_polygons(unsigned int polygon_shader_program, polygon_link* poly_link_head)
 {
@@ -298,63 +481,26 @@ void render_polygons(unsigned int polygon_shader_program, polygon_link* poly_lin
     }
 }
 
-polygon *create_sudo_element(int type)
+
+// Mye er likt som med mangekantene når vi skal rendere laserene
+// Vi har en liste med lasere, vi bruker den til å definere en start og
+// slittposisjon for laseren også sender vi den dataen til grafikkortet
+
+void render_laser(vec3 last_pos, vec3 pos, unsigned int shaderProgram)
 {
-    polygon *sudo_element_thing = (polygon*)malloc(sizeof(polygon));
-    if (type == TRIANGLE)
-    {
-        polygon element = {
-            TRIANGLE,
-            UNCREATED,
-            {
-                69420.0, 69420.0,
-                69420.0, 69420.0,
-                69420.0, 69420.0,
-                0.0, 0.0
-            },
-        };
-        memcpy(sudo_element_thing, &element, sizeof(polygon));
-    } else{
-        polygon element = {
-            RECTANGLE,
-            UNCREATED,
-            {
-                69420.0, 69420.0,
-                69420.0, 69420.0,
-                69420.0, 69420.0,
-                69420.0, 69420.0
-            }
-        };
-        memcpy(sudo_element_thing, &element, sizeof(polygon));
-
-    }
-
-    return sudo_element_thing;
-}
-
-void render_sudo_element(unsigned int shaderProgram, polygon *sudo_element)
-{
-
+    vec4 comp_pos = {
+        last_pos[0],
+        last_pos[1],
+        pos[0],
+        pos[1],
+    };
     unsigned int posLocation = glGetUniformLocation(shaderProgram, "rPos");
+    glUniform4fv(posLocation, 1, comp_pos);
 
-    for (int i = 0; i<3; ++i)
-    {
-        if (sudo_element->points[2*i+2] != 69420.0 && sudo_element->points[2*i+2] != 0.0)
-        {
-            vec4 rPos = {
-                sudo_element->points[2*i],
-                sudo_element->points[2*i+1],
-                sudo_element->points[2*i+2],
-                sudo_element->points[2*i+3],
-            };
-            glUniform4fv(posLocation, 1, rPos);
-            glDrawArrays(GL_LINES, 0, 2);
-            //printf("render %f %f,   %f %f\n", rPos[0], rPos[1], rPos[2], rPos[3]);
-        }
-    }
-
-
+    glDrawArrays(GL_LINES, 0, 2);
 }
+
+
 
 int check_laser_collision(vec3 position, vec3 velocity, int *current_material, int *current_vertex, polygon **current_polygon)
 {
@@ -493,19 +639,7 @@ int is_in_polygon(vec3 position, vec3 velocity, int *current_vertex, polygon *cu
     return 1;
 }
 
-void render_laser(vec3 last_pos, vec3 pos, unsigned int shaderProgram)
-{
-    vec4 comp_pos = {
-        last_pos[0],
-        last_pos[1],
-        pos[0],
-        pos[1],
-    };
-    unsigned int posLocation = glGetUniformLocation(shaderProgram, "rPos");
-    glUniform4fv(posLocation, 1, comp_pos);
 
-    glDrawArrays(GL_LINES, 0, 2);
-}
 
 float speed_in_mat(int material)
 {
@@ -652,7 +786,7 @@ void compute_lasers(unsigned int laserShaderProgram)
     vec3 velocity = {0.0f, 1.0f, 0.0};
     int current_material = AIR;
     int current_vertex = 0;
-    polygon* current_polygon = (polygon*)malloc(sizeof(polygon));
+    polygon *current_polygon = (polygon*)malloc(sizeof(polygon));
     while ((position[0] >= -1632.0f && position[0] <= 1632)&&(position[1] >= -918.0f && position[1] <= 918.0f))
     {
         position[0] += velocity[0];
@@ -688,6 +822,7 @@ void compute_lasers(unsigned int laserShaderProgram)
         }
     }
     render_laser(last_poition, position, laserShaderProgram);
+    return;
 }
 
 int main(){
@@ -820,19 +955,6 @@ int main(){
 
     glBindBuffer(GL_ARRAY_BUFFER, 0); 
     glBindVertexArray(0);
-
-    polygon test = {
-        TRIANGLE,
-        GLASS,
-        {
-            -1400, -500,
-            -1100, 200,
-            -700, -750,
-            0, 0,
-        }
-    };
-
-    push_polygon(&poly_link_head, &test);
 
 
     while (!glfwWindowShouldClose(window))
