@@ -23,12 +23,14 @@
 #define AIR 0
 #define WATER 1
 #define GLASS 2
-#define MIRROR 3
-#define UNCREATED 4
+#define OIL 3
+#define MIRROR 4
+#define UNCREATED 5
 
-#define SPEED_IN_AIR 1
-#define SPEED_IN_WATER 0.66
-#define SPEED_IN_GLASS 0.66
+#define SPEED_IN_AIR 2.99
+#define SPEED_IN_WATER 2.16
+#define SPEED_IN_GLASS 2.02
+#define SPEED_IN_OIL 1.99
 
 #define TRIANGLE  3
 #define RECTANGLE  4
@@ -64,6 +66,8 @@ const char *fragmentShaderSource = "#version 330 core\n"
     "   } else if(material == 2){\n"
     "       FragColor = vec4(0.67f, 0.84f, 0.9f, 1.0f);\n"
     "   } else if (material == 3){\n"
+    "       FragColor = vec4(0.60f, 0.60f, 0.0f, 1.0f);\n"
+    "   } else if (material == 4){\n"
     "       FragColor = vec4(0.45f, 0.45f, 0.45f, 1.0f);\n"
     "   } else{\n"
     "       FragColor = vec4(0.7f, 0.2f, 0.4f, 1.0f);\n"
@@ -141,11 +145,14 @@ int WINDOW_WIDTH = 1632;
 int posX = 0;
 int posY = 0;
 
-int sudo_item_active = 0;
+int sudo_element_active = 0;
 
 vec3 Z_AXIS = {0.0, 0.0, 1.0};
 
-polygon sudo_element;
+polygon *sudo_element;
+
+polygon *create_sudo_element(int type);
+
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
@@ -156,24 +163,24 @@ void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos)
 {
     posX = 2*xpos-WINDOW_WIDTH;
     posY = -(2*ypos-WINDOW_HEIGHT);
-    if (sudo_item_active)
+    if (sudo_element_active)
     {
-        if (sudo_element.points[2] == 69420.0)
+        if (sudo_element->points[2] == 69420.0)
         {
-            sudo_element.points[0] = posX;
-            sudo_element.points[1] = posY;
-        }else if (sudo_element.points[4] == 69420.0)
+            sudo_element->points[0] = posX;
+            sudo_element->points[1] = posY;
+        }else if (sudo_element->points[4] == 69420.0)
         {
-            sudo_element.points[2] = posX;
-            sudo_element.points[3] = posY;
-        } else if (sudo_element.points[6] == 69420.0)
+            sudo_element->points[2] = posX;
+            sudo_element->points[3] = posY;
+        } else if (sudo_element->points[6] == 69420.0 || sudo_element->points[6] == 0.0)
         {
-            sudo_element.points[4] = posX;
-            sudo_element.points[5] = posY;
-        } else if (sudo_element.type == RECTANGLE)
+            sudo_element->points[4] = posX;
+            sudo_element->points[5] = posY;
+        } else if (sudo_element->type == RECTANGLE)
         {
-            sudo_element.points[6] = posX;
-            sudo_element.points[7] = posY;
+            sudo_element->points[6] = posX;
+            sudo_element->points[7] = posY;
         }
     }
 }
@@ -184,28 +191,51 @@ void processInput(GLFWwindow *window)
     {
         glfwSetWindowShouldClose(window, 1);
     } 
+
+    if (glfwGetKey(window, GLFW_KEY_ENTER) == GLFW_PRESS)
+    {
+        sudo_element_active = 1;
+        printf("polygon sides\n");
+        int buff;
+        scanf("%1d", &buff);
+        printf("beofre\n");
+        sudo_element = create_sudo_element(buff);
+        printf("after\n");
+    }
 }
 
 void mouse_button_callback(GLFWwindow *window, int button, int action, int mod)
 {
-    if (action == 0 && sudo_item_active == true)
+    if (action == 0 && sudo_element_active == true)
     {
+        printf("%f, %f, %f, %f\n", 
+            sudo_element->points[0], 
+            sudo_element->points[1], 
+            sudo_element->points[2],
+            sudo_element->points[3]
+            );
 
-        if (sudo_element.points[2] == 69420.0)
+        if (sudo_element->points[2] == 69420.0)
         {
-            sudo_element.points[2] = 0;
-        }else if (sudo_element.points[4] == 69420.0)
+            sudo_element->points[2] = 0;
+        }else if (sudo_element->points[4] == 69420.0)
         {
-            sudo_element.points[4] = 0;
-        }else if (sudo_element.points[6] == 69420.0)
+            sudo_element->points[4] = 0;
+        }else if (sudo_element->points[6] == 69420.0)
         {
-            sudo_element.points[6] = 0;
-        }else if (sudo_element.type == RECTANGLE)
+            sudo_element->points[6] = 5;
+        }else
         {
-            sudo_item_active = false;
-            push_polygon(&poly_link_head, &sudo_element);
+            sudo_element_active = false;
+            int material = 5;
+            while (material > 4 || material < 1)
+            {
+                printf("select material\n 1:Water, 2:Glass, 3:Oil, 4:Mirror\n");
+                int result = scanf("%1d", &material);
+            }
+            sudo_element->material = material;
+            push_polygon(&poly_link_head, sudo_element);
         }
-
 
     }
 }
@@ -268,12 +298,12 @@ void render_polygons(unsigned int polygon_shader_program, polygon_link* poly_lin
     }
 }
 
-polygon create_sudo_element(int type)
+polygon *create_sudo_element(int type)
 {
-    polygon sudo_element;
+    polygon *sudo_element_thing = (polygon*)malloc(sizeof(polygon));
     if (type == TRIANGLE)
     {
-        polygon sudo_element = {
+        polygon element = {
             TRIANGLE,
             UNCREATED,
             {
@@ -283,8 +313,9 @@ polygon create_sudo_element(int type)
                 0.0, 0.0
             },
         };
+        memcpy(sudo_element_thing, &element, sizeof(polygon));
     } else{
-        polygon sudo_element = {
+        polygon element = {
             RECTANGLE,
             UNCREATED,
             {
@@ -294,28 +325,31 @@ polygon create_sudo_element(int type)
                 69420.0, 69420.0
             }
         };
+        memcpy(sudo_element_thing, &element, sizeof(polygon));
+
     }
 
-    return sudo_element;
+    return sudo_element_thing;
 }
 
-void render_sudo_item(unsigned int shaderProgram, polygon sudo_element)
+void render_sudo_element(unsigned int shaderProgram, polygon *sudo_element)
 {
 
     unsigned int posLocation = glGetUniformLocation(shaderProgram, "rPos");
 
     for (int i = 0; i<3; ++i)
     {
-        if (sudo_element.points[2*i+2] != 69420.0 && sudo_element.points[2*i+2] != 0.0)
+        if (sudo_element->points[2*i+2] != 69420.0 && sudo_element->points[2*i+2] != 0.0)
         {
             vec4 rPos = {
-                sudo_element.points[2*i],
-                sudo_element.points[2*i+1],
-                sudo_element.points[2*i+2],
-                sudo_element.points[2*i+3],
+                sudo_element->points[2*i],
+                sudo_element->points[2*i+1],
+                sudo_element->points[2*i+2],
+                sudo_element->points[2*i+3],
             };
             glUniform4fv(posLocation, 1, rPos);
             glDrawArrays(GL_LINES, 0, 2);
+            //printf("render %f %f,   %f %f\n", rPos[0], rPos[1], rPos[2], rPos[3]);
         }
     }
 
@@ -482,6 +516,8 @@ float speed_in_mat(int material)
             return SPEED_IN_WATER;
         case GLASS:
             return SPEED_IN_GLASS;
+        case OIL:
+            return SPEED_IN_OIL;
         case MIRROR:
             return -SPEED_IN_AIR;
         default:
@@ -489,11 +525,10 @@ float speed_in_mat(int material)
     }
 }
 
-void transition_vel_from_air(vec3 vel, int vrtx_indx, polygon *prev_polygon)
+void transition_vel_from_air(vec3 vel, int vrtx_indx, polygon *current_polygon)
 {
-
     int indx_array[8];
-    if (prev_polygon->type == TRIANGLE)
+    if (current_polygon->type == TRIANGLE)
     {
         int new_arr[] = {0, 2, 4, 0, 2, 4, 0, 0};
         memcpy(indx_array, new_arr, sizeof(indx_array));
@@ -503,13 +538,11 @@ void transition_vel_from_air(vec3 vel, int vrtx_indx, polygon *prev_polygon)
         memcpy(indx_array, new_arr, sizeof(indx_array));
     }
 
-
     vec3 vrtx = {
-        prev_polygon->points[indx_array[vrtx_indx+4]] - prev_polygon->points[indx_array[vrtx_indx]],
-        prev_polygon->points[indx_array[vrtx_indx+4]+1] - prev_polygon->points[indx_array[vrtx_indx]+1],
+        current_polygon->points[indx_array[vrtx_indx+4]] - current_polygon->points[indx_array[vrtx_indx]],
+        current_polygon->points[indx_array[vrtx_indx+4]+1] - current_polygon->points[indx_array[vrtx_indx]+1],
         0.0
     };
-
 
     vec3 norm;
     glm_vec3_dup(vrtx, norm);
@@ -521,29 +554,17 @@ void transition_vel_from_air(vec3 vel, int vrtx_indx, polygon *prev_polygon)
 
     float incidence_angle = sign*glm_vec3_angle(norm, vel);
 
-    float speed_in_material = (float)speed_in_mat(prev_polygon->material);
-    float refraction_angle = asin(speed_in_material*sinf(incidence_angle));
+    float speed_in_material = (float)speed_in_mat(current_polygon->material);
+    float refraction_angle = asin(speed_in_material*sinf(incidence_angle)/SPEED_IN_AIR);
 
     glm_vec3_rotate(norm, refraction_angle, Z_AXIS);
     glm_normalize(norm);
     vel[0] = norm[0]; 
     vel[1] = norm[1];
     
-
-    /*float rotation_radians = prev_polygon->rot;
-    int signY = vel[1]>0?1:-1;
-    vec3 up_vec = {0.0, signY*1.0, 0.0};
-    vec3 z_axis = {0.0, 0.0, 1.0};
-    glm_vec3_rotate(up_vec, rotation_radians, Z_AXIS);
-    int signX = up_vec[0]<vel[0]?-1:1;
-    float incidenc_angle = glm_vec3_angle(vel, up_vec);
-    float speed_in_material = (float)speed_in_mat(prev_material->material);
-    float refraction_angle = asin(speed_in_material*sinf(incidenc_angle));
-    glm_vec3_rotate(up_vec, signY*signX*refraction_angle, Z_AXIS);
-    vel[0] = up_vec[0];
-    vel[1] = up_vec[1];*/
     return;
 }
+
 void mirror_reflection(vec3 vel, int vrtx_indx, polygon *current_polygon);
 
 
@@ -579,7 +600,7 @@ int transition_vel_to_air(vec3 vel, int vrtx_indx, polygon *prev_polygon)
     float incidence_angle = glm_vec3_angle(norm, vel);
 
     float speed_in_material = (float)speed_in_mat(prev_polygon->material);
-    float refraction_angle = asin(sinf(incidence_angle)/speed_in_material);
+    float refraction_angle = asin(SPEED_IN_AIR*sinf(incidence_angle)/speed_in_material);
     if (refraction_angle!=refraction_angle){
         mirror_reflection(vel, vrtx_indx, prev_polygon);
         return 0;
@@ -589,32 +610,32 @@ int transition_vel_to_air(vec3 vel, int vrtx_indx, polygon *prev_polygon)
     vel[0] = norm[0];
     vel[1] = norm[1];
 
-
-    /*float rotation_radians = current_rectangle->rot;
-    int signY = vel[1]>0?1:-1;
-    vec3 up_vec = {0.0, signY*1.0, 0.0};
-    glm_vec3_rotate(up_vec, rotation_radians, Z_AXIS);
-    float incidenc_angle = glm_vec3_angle(up_vec, vel);
-    float speed_in_material = (float)speed_in_mat(current_rectangle->material);
-    float refraction_angle = asin(sinf(incidenc_angle)/speed_in_material);
-    int signX = up_vec[0]<vel[0]?-1:1;
-    glm_vec3_rotate(up_vec, signY*signX*refraction_angle, Z_AXIS);
-    vel[0] = up_vec[0];
-    vel[1] = up_vec[1];*/
     return 1;
 }
 
 void mirror_reflection(vec3 vel, int vrtx_indx, polygon *current_polygon)
 {
+    int indx_array[8];
+    if (current_polygon->type == TRIANGLE)
+    {
+        int new_arr[] = {0, 2, 4, 0, 2, 4, 0, 0};
+        memcpy(indx_array, new_arr, sizeof(indx_array));
+        
+    }else{
+        int new_arr[] = {0, 2, 4, 6, 2, 4, 6, 0};
+        memcpy(indx_array, new_arr, sizeof(indx_array));
+    }
+
+
     vec3 vrtx = {
-        current_polygon->points[2*vrtx_indx+2] - current_polygon->points[2*vrtx_indx],
-        current_polygon->points[2*vrtx_indx+3] - current_polygon->points[2*vrtx_indx+1],
+        current_polygon->points[indx_array[vrtx_indx+4]] - current_polygon->points[indx_array[vrtx_indx]],
+        current_polygon->points[indx_array[vrtx_indx+4]+1] - current_polygon->points[indx_array[vrtx_indx]+1],
         0.0
     };
 
     vec3 norm;
     glm_vec3_dup(vrtx, norm);
-    glm_vec3_rotate(norm, PI/2, Z_AXIS);
+    glm_vec3_rotate(norm, -PI/2, Z_AXIS);
 
     vec3 out_vec;
     glm_vec3_scale(vel, -1, out_vec);
@@ -813,6 +834,7 @@ int main(){
 
     push_polygon(&poly_link_head, &test);
 
+
     while (!glfwWindowShouldClose(window))
     {
         glfwGetFramebufferSize(window, &WINDOW_WIDTH, &WINDOW_HEIGHT);
@@ -828,35 +850,12 @@ int main(){
 
 
 
-
-       /*vec4 x_pos = {
-            -0.5, -0.5, 0.5, 0.5
-        };
-        vec4 y_pos = {
-            -0.5, 0.5, 0.5, -0.5
-        };
-
-
-        unsigned int xlocation = glGetUniformLocation(shaderProgram, "x_pos");
-        glUniform4fv(xlocation, 1, x_pos);
-
-        unsigned int ylocation = glGetUniformLocation(shaderProgram, "y_pos");
-        glUniform4fv(ylocation, 1, y_pos);
-
-        int material = GLASS;
-        int materialLocation = glGetUniformLocation(shaderProgram, "material");
-        glUniform1i(materialLocation, material);
-
-        glDrawArrays(GL_TRIANGLES, 0, 6);*/
-
-
-        if (sudo_item_active)
+        glUseProgram(laserShaderProgram);
+        if (sudo_element_active)
         {
-            render_sudo_item(shaderProgram, sudo_element);
+            render_sudo_element(laserShaderProgram, sudo_element);
         }
 
-
-        glUseProgram(laserShaderProgram);
         glBindVertexArray(laser_VAO);
 
         compute_lasers(laserShaderProgram);
@@ -865,7 +864,7 @@ int main(){
 
         glfwSwapBuffers(window);
         glfwPollEvents();
-        sleep(2);
+        //sleep(2);
     }
 
     glDeleteVertexArrays(1, &VAO);
