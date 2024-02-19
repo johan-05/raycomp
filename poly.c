@@ -500,10 +500,18 @@ void render_laser(vec3 last_pos, vec3 pos, unsigned int shaderProgram)
     glDrawArrays(GL_LINES, 0, 2);
 }
 
-
+//-------------------- Seksjon 5: Simulering ---------------------
+// Nå er vi kommet til selve hjertet av programmet: Selve simuleringen
+// Her er funksjonene lengre og mer kompliserte.
+// Den første vi skal se på sjekker for kollisjoner mellom en laser og mangekantene.
+// Funksjonen looper over alle sidekantene til alle mangekanatene og sjekker for
+// kollisjoner med et smart triks. En kollisjon vil si at laserens posisjon
+// bytter side av sidekante. Jeg bruker vektor kryssprodukt for å finne ut
+// hvilken side av sidekanten laseren er på. 
 
 int check_laser_collision(vec3 position, vec3 velocity, int *current_material, int *current_vertex, polygon **current_polygon)
 {
+
     polygon_link* current = poly_link_head;
 
     while (current != NULL)
@@ -522,10 +530,7 @@ int check_laser_collision(vec3 position, vec3 velocity, int *current_material, i
 
         for (int i = 0; i<current->poly_ptr->type; ++i)
         {
-            // if vector from vertex a to position is on left, and vector
-            // from vertex a to to position + velcity is on right
-            // and position to vectex a and positon to vertex b are on different 
-            // sides from position + velocity. 
+
             vec3 vrtx = {
                 current->poly_ptr->points[indx_array[i+4]] - current->poly_ptr->points[indx_array[i]],
                 current->poly_ptr->points[indx_array[i+4]+1] - current->poly_ptr->points[indx_array[i]+1],
@@ -572,6 +577,14 @@ int check_laser_collision(vec3 position, vec3 velocity, int *current_material, i
     }
     return 0;
 }
+
+// Denne funksjonen er veldig lik den forrige. 
+// Den sjekker for kollisjoner men bar for en mangekant.
+// Når vi har kollidert med en mangekant vet vi at neste kollisjon
+// vil være laseren på vei ut av den samme mangekanten. Derfor trenger vi ikke
+// sjekke for kollisjoner mellom sidekantene til alle de andre mangekantene.
+// Funkjonen heter is_in_polygon fordi den returnerer true hvis vi fremdeles er inne
+// i den samme mangekanten og false hvis vi har gått ut. 
 
 int is_in_polygon(vec3 position, vec3 velocity, int *current_vertex, polygon *current_polygon)
 {
@@ -639,7 +652,8 @@ int is_in_polygon(vec3 position, vec3 velocity, int *current_vertex, polygon *cu
     return 1;
 }
 
-
+// Dette er en kort funksjon som returnerer lysfarten i materialet
+// som puttes in. 
 
 float speed_in_mat(int material)
 {
@@ -658,6 +672,14 @@ float speed_in_mat(int material)
             return 69420.0;
     }
 }
+
+void mirror_reflection(vec3 vel, int vrtx_indx, polygon *current_polygon);
+
+// De to funksjonene som gjør selve lys-bøyingen. 
+// Den første er vel_from_air altså bøying fra luft inn i et
+// annet materiale. Den andre vel_to_air gjør bøyingen fra materiale
+// tilbake til luft. (Det er store muligheter for bugs om du tegner
+// mangekanter oppå hverandre)
 
 void transition_vel_from_air(vec3 vel, int vrtx_indx, polygon *current_polygon)
 {
@@ -678,18 +700,33 @@ void transition_vel_from_air(vec3 vel, int vrtx_indx, polygon *current_polygon)
         0.0
     };
 
+    // Den første delen av funksjonen har satt sammen punkt til en sidekant vrtx
+    // Det neste vi gjør er å lage en normalvektor til sidekanten ved å duplisere
+    // sidekanten også rotere den rundt z-aksen 
+
     vec3 norm;
     glm_vec3_dup(vrtx, norm);
     glm_vec3_rotate(norm, -PI/2, Z_AXIS);
+
+    // For å finne innfallsvinkelen bruker jeg en OpenGL funksjon som heter
+    // glm_vec3_angle som gir vinkelen mellom to vektorer. Problemet er at vi kan
+    // ha en 30° innfallsvinkel fra begge sider og funksjonen ikke skiller mellom 30° og -30°.
+    // Derfor trenger jeg en "sign" skalar på enten 1 eller -1 for å skille mellom 
+    // innfallsvinkel fra høyere og venstre.
 
     vec3 cross_result;
     glm_vec3_cross(vel, norm, cross_result);
     int sign = cross_result[2]<0?1:-1;
 
     float incidence_angle = sign*glm_vec3_angle(norm, vel);
+    // Dermed får vi innfallsvinkelen som "sign" ganger med vinkelen mellom velocity og 
+    // normal-vinkelen
 
     float speed_in_material = (float)speed_in_mat(current_polygon->material);
     float refraction_angle = asin(speed_in_material*sinf(incidence_angle)/SPEED_IN_AIR);
+
+    // Med den kan vi kalkulere refraksjonsvinkelen og rotere normlvektoren
+    // med refraksjonsvinkelen. Dette blir den nye verdien for velocity.
 
     glm_vec3_rotate(norm, refraction_angle, Z_AXIS);
     glm_normalize(norm);
@@ -699,10 +736,12 @@ void transition_vel_from_air(vec3 vel, int vrtx_indx, polygon *current_polygon)
     return;
 }
 
-void mirror_reflection(vec3 vel, int vrtx_indx, polygon *current_polygon);
+// I motsetning til transistion_vel_from_air som returnerte void returnerer
+// denne bool fordi bøyingen ut av et materiale kan feile. Hvis innfallsvinkelen
+// er stor nok vil laseren reflektere internt og funksjonen returnere false. 
+// med unntak av det er det mest likt som den forrige funksjonen
 
-
-int transition_vel_to_air(vec3 vel, int vrtx_indx, polygon *prev_polygon)
+bool transition_vel_to_air(vec3 vel, int vrtx_indx, polygon *prev_polygon)
 {
 
     int indx_array[8];
@@ -735,6 +774,9 @@ int transition_vel_to_air(vec3 vel, int vrtx_indx, polygon *prev_polygon)
 
     float speed_in_material = (float)speed_in_mat(prev_polygon->material);
     float refraction_angle = asin(SPEED_IN_AIR*sinf(incidence_angle)/speed_in_material);
+    // Ved intern refleksjon vil asin funksjonen returnere NaN (not a number) som har
+    // en unik egenskap. Den er aldri lik noe. NaN er den eneste verdien som ikke er lik seg selv
+    // Dette bruker jeg for å kontrollere om brytningen var vellykket
     if (refraction_angle!=refraction_angle){
         mirror_reflection(vel, vrtx_indx, prev_polygon);
         return 0;
@@ -746,6 +788,9 @@ int transition_vel_to_air(vec3 vel, int vrtx_indx, polygon *prev_polygon)
 
     return 1;
 }
+
+// Ved intern refleksjon eller kollisjon med et speil vil paseren bøyes med denne
+// funksjonen. Den er en del simplere enn de to forrige.
 
 void mirror_reflection(vec3 vel, int vrtx_indx, polygon *current_polygon)
 {
@@ -767,6 +812,10 @@ void mirror_reflection(vec3 vel, int vrtx_indx, polygon *current_polygon)
         0.0
     };
 
+    // Vi setter sammen sidekanten likt som før.
+    // Alt vi gjør er å lage en normalvektor og speiler velocity rundt normalvektoren
+    // og endrer retningen.
+
     vec3 norm;
     glm_vec3_dup(vrtx, norm);
     glm_vec3_rotate(norm, -PI/2, Z_AXIS);
@@ -779,6 +828,9 @@ void mirror_reflection(vec3 vel, int vrtx_indx, polygon *current_polygon)
     return;
 }
 
+// Dette er selve loopen som simulerer laseren fram til den forlater sjermen
+// Vi starter med å gi laseren en start posisjon og start fart
+
 void compute_lasers(unsigned int laserShaderProgram)
 {
     vec3 last_poition = {-1300.0f, -918.0f, 0.0f};
@@ -787,6 +839,11 @@ void compute_lasers(unsigned int laserShaderProgram)
     int current_material = AIR;
     int current_vertex = 0;
     polygon *current_polygon = (polygon*)malloc(sizeof(polygon));
+
+    // Så looper vi fra til posisjoner er utenfor sjermen. 
+    // Inne i loopen endrer vi posisjoen med farten og sjekker for
+    // kollisjoner. 
+
     while ((position[0] >= -1632.0f && position[0] <= 1632)&&(position[1] >= -918.0f && position[1] <= 918.0f))
     {
         position[0] += velocity[0];
@@ -825,15 +882,22 @@ void compute_lasers(unsigned int laserShaderProgram)
     return;
 }
 
+
+
+//-------------------- Seksjon 6: Starten? wtf ---------------------
+// yep, dette er starten av programmet. Alt fram til nå har ikke gjort noe som helst.
+
+
 int main(){
+
+    // Først er det hel haug med initialisering av OpenGL contexten og slikt.
+    // Vi laster driverne og lager en context og en vindu.
 
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    // glfw window creation
-    // --------------------
     GLFWwindow* window = window_init();
 
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
@@ -844,7 +908,14 @@ int main(){
     int width, height;
     glfwGetFramebufferSize(window, &width, &height);
 
-    // Shaders
+        
+    // Tidligere i programmet har jeg bare skrevet at jeg har
+    // sendt data over mystiske data-broer til grafikk-kortet, vel
+    // nå kommer vi til å faktisk måtte sette opp alt dette.
+    // Vi kompilerer shaderene, linker dem og definerer data-broen
+    // Vi er også nødt til å lage to Vertex Array Objekt og Vertex 
+    // Buffer objekt for å lagre dataen i.
+
     unsigned int vertexShader = glCreateShader(GL_VERTEX_SHADER);
     glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
     glCompileShader(vertexShader);
@@ -882,7 +953,6 @@ int main(){
     glDeleteShader(vertexShader);
     glDeleteShader(fragmentShader);
 
-    // set up vertex data and configure vertex attributes
     float vertices[] = {
         0.0, 1.0, 2.0, 
         0.0, 2.0, 3.0,
@@ -892,7 +962,6 @@ int main(){
     unsigned int VBO, VAO;
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
-    // bind the Vertex Array Object first, then bind and set vertex buffer(s), and then configure vertex attributes(s).
     glBindVertexArray(VAO);
 
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
@@ -943,7 +1012,6 @@ int main(){
     unsigned int laser_VBO, laser_VAO;
     glGenVertexArrays(1, &laser_VAO);
     glGenBuffers(1, &laser_VBO);
-    // bind the Vertex Array Object first, then bind and set vertex buffer(s), and then configure vertex attributes(s).
     glBindVertexArray(laser_VAO);
 
     float lines[] = {0.0f, 1.0f};
@@ -956,38 +1024,56 @@ int main(){
     glBindBuffer(GL_ARRAY_BUFFER, 0); 
     glBindVertexArray(0);
 
+    
+    // Til slutt har vi endelig kommet til selve event-loopen
+    // Denne kjører en gang for hver frame, omtrent hvert 16 ms
 
     while (!glfwWindowShouldClose(window))
     {
+        // Første oppdatere vi vindu-størrelsen i tilfølge vinduet har endret
+        // størrelse. Deretter lytter vi etter mus og tastatur events.
+        // Så renser vi vinduet, setter det til bakgrunnsfargen og binder
+        // programmet for mangekanter til GL contexten. 
+
         glfwGetFramebufferSize(window, &WINDOW_WIDTH, &WINDOW_HEIGHT);
-
         processInput(window);
-
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
-
         glBindVertexArray(VAO); 
         glUseProgram(shaderProgram);
+
+        // Fordelen med å ha gjort så mye før programmet starter er at å rendere
+        // alle mangekantene blir så enkelt som å kalle en funksjon.
+
         render_polygons(shaderProgram, poly_link_head);
 
-
+        // Når som vi er ferdig med mangekantene kan vi binde programmet for
+        // lasere til GL contexten.
 
         glUseProgram(laserShaderProgram);
+        glBindVertexArray(laser_VAO);
+
+        // Hvis vi har et sudo element aktivt må vi rendere det
+
         if (sudo_element_active)
         {
             render_sudo_element(laserShaderProgram, sudo_element);
         }
 
-        glBindVertexArray(laser_VAO);
-
-        compute_lasers(laserShaderProgram);
+        // compute lasers gjør selve laser-simuleringen og renderer laserne
 
         glLineWidth(5);
+        compute_lasers(laserShaderProgram);
+
+        // Helt til slutt bytter vi video-bufferene for å ferdigstille den nye framen
 
         glfwSwapBuffers(window);
         glfwPollEvents();
-        //sleep(2);
     }
+
+    // Dette kjører når programmet holder på å avslutte.
+    // Vi sletter ressurser og avslutter.
+
 
     glDeleteVertexArrays(1, &VAO);
     glDeleteBuffers(1, &VBO);
@@ -997,3 +1083,4 @@ int main(){
     return 0;
 }
 
+// Hvis du kom helt hit vil jeg bare si: Beklager!
